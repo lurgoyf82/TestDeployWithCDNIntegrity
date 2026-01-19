@@ -34,6 +34,14 @@ jobs:
           test -f README.md
           test -f index.html
 
+      - name: Check CDN integrity
+        shell: pwsh
+        run: |
+          ./tools/deployCheckCDNIntegrity.ps1 `
+            -LogLevel 3 `
+            -FilePatterns "*.aspx" "*.html" "*.php" "*.jsp" `
+            -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+
       - name: Fake compile
         run: |
           set -euo pipefail
