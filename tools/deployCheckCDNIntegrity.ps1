@@ -2,7 +2,7 @@
 #Powershell script per verificare l'integrità dei file caricati sui CDN specificati durante il deploy.
 #
 # Esecuzione locale (cmd):
-# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\siunet-gearsnet\tools\deployCheckCDNIntegrity.ps1"
+# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\TestDeployWithCDNIntegrity\tools\deployCheckCDNIntegrity.ps1"
 #
 # Azure DevOps (azure-pipelines.yml):
 #
@@ -33,21 +33,13 @@
 
 param(
   [string[]] $CdnDomains = @(
-    ,"http://213.215.162.189:8886"
-    ,"http://maps.google.com"
-    ,"http://www.siunet.net"
-    ,"https://110.siunet.it:8887"
-    ,"https://110.siunet.it:8888"
-    ,"https://ajax.aspnetcdn.com"
-    ,"https://ams.servizi.mquadro.net"
+    "http://maps.google.com"
     ,"https://cdn.jsdelivr.net"
     ,"https://cdnjs.cloudflare.com"
     ,"https://code.jquery.com"
     ,"https://maps.google.com"
-    ,"https://npmcdn.com"
+    ,"https://maps.googleapis.com"
     ,"https://unpkg.com"
-    ,"https://www.openlayers.org"
-    ,"https://www.runtrackers.net"
     #Inserire qui altri CDN se necessario
   ),
   [string[]] $FilePatterns = @(

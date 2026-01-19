@@ -2,7 +2,7 @@
 #Powershell script per verificare l'integrità dei file caricati sui CDN specificati durante il deploy.
 #
 # Esecuzione locale (cmd):
-# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\siunet-gearsnet\tools\deployCheckCDNIntegrity.ps1"
+# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\TestDeployWithCDNIntegrity\tools\deployCheckCDNIntegrity.ps1"
 #
 # Azure DevOps (azure-pipelines.yml):
 #

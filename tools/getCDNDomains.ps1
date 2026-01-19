@@ -8,7 +8,7 @@
 #   così da poterli analizzare o validare in un secondo momento.
 #
 # Esempio:
-# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\siunet-gearsnet\tools\getCDNDomains.ps1"
+# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\TestDeployWithCDNIntegrity\tools\getCDNDomains.ps1"
 
 param(
   [string[]] $FilePatterns = @(
@@ -19,6 +19,8 @@ param(
     ,"*.htm"
     ,"*.cshtml"
     ,"*.vbhtml"
+    ,"*.php"
+    ,"*.jsp"
   )
 )
 
