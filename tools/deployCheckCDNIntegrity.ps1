@@ -33,18 +33,16 @@
 
 param(
   [string[]] $CdnDomains = @(
-    "http://maps.google.com"
-    ,"https://cdn.jsdelivr.net"
-    ,"https://cdnjs.cloudflare.com"
-    ,"https://code.jquery.com"
-    ,"https://maps.google.com"
-    ,"https://maps.googleapis.com"
-    ,"https://unpkg.com"
-    #Inserire qui altri CDN se necessario
+    "http://maps.google.com",
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+    "https://code.jquery.com",
+    "https://maps.google.com",
+    "https://maps.googleapis.com",
+    "https://unpkg.com"
   ),
   [string[]] $FilePatterns = @(
-      "*.aspx"
-      #Aggiungere qui altri pattern di file se necessario, ricordarsi la virgola iniziale
+    "*.aspx"
   )
 )
 
