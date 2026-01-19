@@ -1,0 +1,79 @@
+name: Fake Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: fake-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-test-deploy:
+    name: Build, Test, Package, Deploy (Fake)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          echo "build_timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate repository layout
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f index.html
+
+      - name: Check CDN integrity
+        shell: pwsh
+        run: |
+          ./tools/deployCheckCDNIntegrity.ps1 `
+            -LogLevel 3 `
+            -FilePatterns "*.aspx" "*.html" "*.php" "*.jsp" `
+            -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+
+      - name: Fake compile
+        run: |
+          set -euo pipefail
+          rm -rf build
+          mkdir -p build
+          cp -R *.html *.aspx *.jsp *.php README.md CDN_TEST_PAGES.md build/
+          echo "Compiled at ${{ steps.metadata.outputs.build_timestamp }}" > build/build-info.txt
+          echo "Source commit ${{ steps.metadata.outputs.commit_sha }}" >> build/build-info.txt
+
+      - name: Fake test suite
+        run: |
+          set -euo pipefail
+          echo "Running fake tests..."
+          test -s build/index.html
+          echo "All fake tests passed."
+
+      - name: Package artifact
+        run: |
+          set -euo pipefail
+          tar -czf build-artifact.tgz build
+          ls -lh build-artifact.tgz
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fake-deploy-build
+          path: build-artifact.tgz
+          retention-days: 7
+
+      - name: Fake deploy
+        if: github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          echo "Deploying build-artifact.tgz to fake environment..."
+          echo "Deployment complete."
