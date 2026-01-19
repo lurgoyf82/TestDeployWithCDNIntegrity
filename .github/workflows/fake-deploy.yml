@@ -43,10 +43,27 @@ jobs:
             -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
 
           $result = $json | ConvertFrom-Json
-          "CDN integrity - Successes: $($result.Counts.Successes) - Failures: $($result.Counts.Failures)"
+
+          Write-Host "CDN integrity - Successes: $($result.Counts.Successes) - Failures: $($result.Counts.Failures)"
 
           if ([int]$result.Counts.Failures -gt 0) {
-            throw "CDN integrity check failed: $($result.Counts.Failures) reference(s) without integrity."
+            Write-Host ""
+            Write-Host "Riferimenti CDN senza attributo 'integrity' trovati:"
+            Write-Host "-------------------------------------------------"
+
+            foreach ($f in $result.Failures) {
+              Write-Host ("File: {0}" -f $f.File)
+              Write-Host ("Posizione: riga {0}, colonna {1}" -f $f.Line, $f.Column)
+              Write-Host ("CDN: {0}" -f $f.Cdn)
+              Write-Host ("Riga: {0}" -f $f.LineText)
+              Write-Host ""
+            }
+
+            throw ("Verifica CDN fallita: trovati {0} riferimento/i senza 'integrity'." -f $result.Counts.Failures)
+          }
+          else {
+            Write-Host ""
+            Write-Host ("OK - Verifica CDN superata: tutti i riferimenti CDN hanno l'attributo 'integrity'. (Riferimenti verificati: {0})" -f $result.Counts.Successes)
           }
 
       - name: Fake compile
