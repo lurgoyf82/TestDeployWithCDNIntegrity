@@ -44,7 +44,6 @@ jobs:
               "*.html" `
               "*.php" `
               "*.jsp" `
-
             -CdnDomains `
               "http://maps.google.com" `
               "https://cdn.jsdelivr.net" `
