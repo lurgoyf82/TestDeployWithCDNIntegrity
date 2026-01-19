@@ -61,8 +61,8 @@ jobs:
       # ============================================================
       
       - name: CDN Integrity - Exec
+        shell: pwsh
         run: |
-          # STEP 2 - EXEC: esecuzione dello script e cattura output JSON
           $json = & ./tools/deployCheckCDNIntegrity.ps1
 
           if ([string]::IsNullOrWhiteSpace($json)) {
