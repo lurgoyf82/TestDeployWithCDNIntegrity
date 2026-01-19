@@ -1,36 +1,3 @@
-#C:\Repos\siunet-gearsnet\tools\deployCheckCDNIntegrity.ps1
-#Powershell script per verificare l'integrità dei file caricati sui CDN specificati durante il deploy.
-#
-# Esecuzione locale (cmd):
-# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\TestDeployWithCDNIntegrity\tools\deployCheckCDNIntegrity.ps1"
-#
-# Azure DevOps (azure-pipelines.yml):
-#
-# - task: PowerShell@2
-#   displayName: Check CDN integrity
-#   inputs:
-#     pwsh: true
-#     filePath: 'tools/deployCheckCDNIntegrity.ps1'
-#     arguments: >
-#       -LogLevel 0
-#       -FilePatterns "*.aspx" "*.master"
-#       -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
-#
-#
-# AWS CodeBuild (buildspec.yml):
-#
-# version: 0.2
-# phases:
-#   build:
-#     commands:
-#       - powershell.exe -NoProfile -ExecutionPolicy Bypass `
-#           -File ".\tools\deployCheckCDNIntegrity.ps1" `
-#           -LogLevel 0 `
-#           -FilePatterns "*.aspx" "*.master" `
-#           -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
-
-
-
 param(
   [string[]] $CdnDomains = @(
     "http://maps.google.com"
@@ -132,3 +99,54 @@ foreach ($file in $files) {
     Failures  = $allFailures.Count
   }
 } | ConvertTo-Json -Depth 6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#C:\Repos\siunet-gearsnet\tools\deployCheckCDNIntegrity.ps1
+#Powershell script per verificare l'integrità dei file caricati sui CDN specificati durante il deploy.
+#
+# Esecuzione locale (cmd):
+# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\TestDeployWithCDNIntegrity\tools\deployCheckCDNIntegrity.ps1"
+#
+# Azure DevOps (azure-pipelines.yml):
+#
+# - task: PowerShell@2
+#   displayName: Check CDN integrity
+#   inputs:
+#     pwsh: true
+#     filePath: 'tools/deployCheckCDNIntegrity.ps1'
+#     arguments: >
+#       -LogLevel 0
+#       -FilePatterns "*.aspx" "*.master"
+#       -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+#
+#
+# AWS CodeBuild (buildspec.yml):
+#
+# version: 0.2
+# phases:
+#   build:
+#     commands:
+#       - powershell.exe -NoProfile -ExecutionPolicy Bypass `
+#           -File ".\tools\deployCheckCDNIntegrity.ps1" `
+#           -LogLevel 0 `
+#           -FilePatterns "*.aspx" "*.master" `
+#           -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+
+
