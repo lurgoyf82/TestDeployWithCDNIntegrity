@@ -39,8 +39,18 @@ jobs:
         run: |
           $json = ./tools/deployCheckCDNIntegrity.ps1 `
             -LogLevel 3 `
-            -FilePatterns "*.aspx" "*.html" "*.php" "*.jsp" `
-            -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+            -FilePatterns "*.aspx"
+                          "*.html"
+                          "*.php"
+                          "*.jsp" `
+
+            -CdnDomains "http://maps.google.com" 
+                        "https://cdn.jsdelivr.net" 
+                        "https://cdnjs.cloudflare.com" 
+                        "https://code.jquery.com" 
+                        "https://maps.google.com" 
+                        "https://maps.googleapis.com" 
+                        "https://unpkg.com"
 
           $result = $json | ConvertFrom-Json
 
