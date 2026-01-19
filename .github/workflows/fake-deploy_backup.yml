@@ -1,0 +1,200 @@
+name: Fake Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - develop_feat_cdn_integrity_mai
+  workflow_dispatch:
+    inputs:
+      cdnDomains:
+        description: 'Override CdnDomains (uno per riga). Lascia vuoto per usare i default dello script.'
+        required: false
+        type: string
+      filePatterns:
+        description: 'Override FilePatterns (uno per riga). Lascia vuoto per usare i default dello script.'
+        required: false
+        type: string
+      excludeFolders:
+        description: 'Override ExcludeFolders (uno per riga). Lascia vuoto per usare i default dello script.'
+        required: false
+        type: string
+
+jobs:
+  build-test-deploy:
+    name: Build, Test, Package, Deploy (Fake)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          echo "build_timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate repository layout
+        run: |
+          set -euo pipefail
+          test -f README.md
+          test -f index.html
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      - name: Check CDN integrity
+        shell: pwsh
+        run: |
+          $args = @()
+
+          $configPath = Join-Path $env:GITHUB_WORKSPACE 'tools/cdn-integrity.config.json'
+          $hasDispatchInputs =
+            ('${{ github.event.inputs.filePatterns }}'.Trim().Length -gt 0) -or
+            ('${{ github.event.inputs.cdnDomains }}'.Trim().Length -gt 0) -or
+            ('${{ github.event.inputs.excludeFolders }}'.Trim().Length -gt 0)
+
+          if ($hasDispatchInputs) {
+            if ('${{ github.event.inputs.filePatterns }}'.Trim()) {
+              $args += '-FilePatterns'
+              $args += ('${{ github.event.inputs.filePatterns }}' -split "\r?\n" | Where-Object { $_.Trim() })
+            }
+
+            if ('${{ github.event.inputs.cdnDomains }}'.Trim()) {
+              $args += '-CdnDomains'
+              $args += ('${{ github.event.inputs.cdnDomains }}' -split "\r?\n" | Where-Object { $_.Trim() })
+            }
+
+            if ('${{ github.event.inputs.excludeFolders }}'.Trim()) {
+              $args += '-ExcludeFolders'
+              $args += ('${{ github.event.inputs.excludeFolders }}' -split "\r?\n" | Where-Object { $_.Trim() })
+            }
+          }
+          elseif (Test-Path -LiteralPath $configPath) {
+            $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+
+            if (@($config.FilePatterns).Count -gt 0) {
+              $args += '-FilePatterns'
+              $args += @($config.FilePatterns)
+            }
+
+            if (@($config.CdnDomains).Count -gt 0) {
+              $args += '-CdnDomains'
+              $args += @($config.CdnDomains)
+            }
+
+            if (@($config.ExcludeFolders).Count -gt 0) {
+              $args += '-ExcludeFolders'
+              $args += @($config.ExcludeFolders)
+            }
+          }
+
+          $json = & ./tools/deployCheckCDNIntegrity.ps1 @args
+          $result = $json | ConvertFrom-Json
+
+          $failures = @($result.Failures)
+          $successes = @($result.Successes)
+
+          Write-Host "CDN integrity - Successes: $($successes.Count) - Failures: $($failures.Count)"
+
+          "## CDN integrity report" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          ("- Successes: **{0}**" -f $successes.Count) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          ("- Failures: **{0}**" -f $failures.Count) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+          if ($failures.Count -gt 0) {
+            "### Riferimenti senza `integrity`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+            foreach ($f in $failures) {
+              $ws = $env:GITHUB_WORKSPACE.TrimEnd('/', '\')
+              $full = [string]$f.File
+              $relative = $full.Replace('\','/').Replace($ws.Replace('\','/').TrimEnd('/') + '/', '')
+
+              Write-Host ("::warning file={0},line={1},col={2}::Manca 'integrity' | CDN: {3}" -f $relative, $f.Line, $f.Column, $f.Cdn)
+
+              ("- `{0}` (R:{1}, C:{2})  `{3}`" -f $relative, $f.Line, $f.Column, $f.LineText.Trim()) |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            }
+          }
+          else {
+            "### OK" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "Tutti i riferimenti CDN includono l'attributo `integrity`." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      - name: Fake compile
+        run: |
+          set -euo pipefail
+          rm -rf build
+          mkdir -p build
+          cp -R *.html *.aspx *.jsp *.php README.md CDN_TEST_PAGES.md build/
+          echo "Compiled at ${{ steps.metadata.outputs.build_timestamp }}" > build/build-info.txt
+          echo "Source commit ${{ steps.metadata.outputs.commit_sha }}" >> build/build-info.txt
+
+      - name: Fake test suite
+        run: |
+          set -euo pipefail
+          echo "Running fake tests..."
+          test -s build/index.html
+          echo "All fake tests passed."
+
+      - name: Package artifact
+        run: |
+          set -euo pipefail
+          tar -czf build-artifact.tgz build
+          ls -lh build-artifact.tgz
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fake-deploy-build
+          path: build-artifact.tgz
+          retention-days: 7
+
+      - name: Fake deploy
+        if: github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          echo "Deploying build-artifact.tgz to fake environment..."
+          echo "Deployment complete."

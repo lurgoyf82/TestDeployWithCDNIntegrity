@@ -48,127 +48,132 @@ jobs:
 
 
 
+          
 
 
-
-
-
-
-
-
-
-      - name: Check CDN integrity
+      # ============================================================
+      # STEP 1 - INPUT: inizializzazione e scelta fonte configurazione
+      # ------------------------------------------------------------
+      # - Inizializzare `$args` (eventuali override)
+      # - Capire se ci sono input da `workflow_dispatch`
+      # - Altrimenti, valutare un file JSON di override nel workspace
+      # ============================================================
+          
+      - name: CDN Integrity Check
         shell: pwsh
         run: |
           $args = @()
 
-          $configPath = Join-Path $env:GITHUB_WORKSPACE 'tools/cdn-integrity.config.json'
+          $dispatchFilePatterns = '${{ github.event.inputs.filePatterns }}'
+          $dispatchCdnDomains = '${{ github.event.inputs.cdnDomains }}'
+          $dispatchExcludeFolders = '${{ github.event.inputs.excludeFolders }}'
+
           $hasDispatchInputs =
-            ('${{ github.event.inputs.filePatterns }}'.Trim().Length -gt 0) -or
-            ('${{ github.event.inputs.cdnDomains }}'.Trim().Length -gt 0) -or
-            ('${{ github.event.inputs.excludeFolders }}'.Trim().Length -gt 0)
+            (-not [string]::IsNullOrWhiteSpace($dispatchFilePatterns)) -or
+            (-not [string]::IsNullOrWhiteSpace($dispatchCdnDomains)) -or
+            (-not [string]::IsNullOrWhiteSpace($dispatchExcludeFolders))
 
           if ($hasDispatchInputs) {
-            if ('${{ github.event.inputs.filePatterns }}'.Trim()) {
+            if (-not [string]::IsNullOrWhiteSpace($dispatchFilePatterns)) {
               $args += '-FilePatterns'
-              $args += ('${{ github.event.inputs.filePatterns }}' -split "\r?\n" | Where-Object { $_.Trim() })
+              $args += ($dispatchFilePatterns -split "\r?\n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
             }
 
-            if ('${{ github.event.inputs.cdnDomains }}'.Trim()) {
+            if (-not [string]::IsNullOrWhiteSpace($dispatchCdnDomains)) {
               $args += '-CdnDomains'
-              $args += ('${{ github.event.inputs.cdnDomains }}' -split "\r?\n" | Where-Object { $_.Trim() })
+              $args += ($dispatchCdnDomains -split "\r?\n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
             }
 
-            if ('${{ github.event.inputs.excludeFolders }}'.Trim()) {
+            if (-not [string]::IsNullOrWhiteSpace($dispatchExcludeFolders)) {
               $args += '-ExcludeFolders'
-              $args += ('${{ github.event.inputs.excludeFolders }}' -split "\r?\n" | Where-Object { $_.Trim() })
+              $args += ($dispatchExcludeFolders -split "\r?\n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
             }
-          }
-          elseif (Test-Path -LiteralPath $configPath) {
-            $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
-
-            if (@($config.FilePatterns).Count -gt 0) {
-              $args += '-FilePatterns'
-              $args += @($config.FilePatterns)
-            }
-
-            if (@($config.CdnDomains).Count -gt 0) {
-              $args += '-CdnDomains'
-              $args += @($config.CdnDomains)
-            }
-
-            if (@($config.ExcludeFolders).Count -gt 0) {
-              $args += '-ExcludeFolders'
-              $args += @($config.ExcludeFolders)
-            }
-          }
-
-          $json = & ./tools/deployCheckCDNIntegrity.ps1 @args
-          $result = $json | ConvertFrom-Json
-
-          # Nuovo contratto: result.successes/result.failures sono mappe file -> array occorrenze
-          $failures = @()
-          if ($null -ne $result.result.failures) {
-            foreach ($fileProp in $result.result.failures.PSObject.Properties) {
-              $filePath = $fileProp.Name
-              foreach ($occ in @($fileProp.Value)) {
-                $failures += [pscustomobject]@{
-                  File     = $filePath
-                  Line     = $occ.line
-                  Column   = $occ.column
-                  Cdn      = $occ.cdn
-                  LineText = $occ.lineText
-                }
-              }
-            }
-          }
-
-          $successes = @()
-          if ($null -ne $result.result.successes) {
-            foreach ($fileProp in $result.result.successes.PSObject.Properties) {
-              $filePath = $fileProp.Name
-              foreach ($occ in @($fileProp.Value)) {
-                $successes += [pscustomobject]@{
-                  File     = $filePath
-                  Line     = $occ.line
-                  Column   = $occ.column
-                  Cdn      = $occ.cdn
-                  LineText = $occ.lineText
-                }
-              }
-            }
-          }
-
-          Write-Host "CDN integrity - Successes: $($successes.Count) - Failures: $($failures.Count)"
-
-          "## CDN integrity report" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          ("- Files scanned: **{0}**" -f $result.summary.totalFilesScanned) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          ("- Success occurrences: **{0}**" -f $result.summary.totalSuccessOccurrences) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          ("- Failure occurrences: **{0}**" -f $result.summary.totalFailureOccurrences) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-          if ($failures.Count -gt 0) {
-            "### Riferimenti senza `integrity`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-
-            foreach ($f in $failures) {
-              $ws = $env:GITHUB_WORKSPACE.TrimEnd('/', '\')
-              $full = [string]$f.File
-              $relative = $full.Replace('\','/').Replace($ws.Replace('\','/').TrimEnd('/') + '/', '')
-
-              Write-Host ("::warning file={0},line={1},col={2}::Manca 'integrity' | CDN: {3}" -f $relative, $f.Line, $f.Column, $f.Cdn)
-
-              ("- `{0}` (R:{1}, C:{2})  `{3}`" -f $relative, $f.Line, $f.Column, $f.LineText.Trim()) |
-                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-            }
-
-            throw "CDN integrity check failed: $($failures.Count) occorrenze senza 'integrity'."
           }
           else {
-            "### OK" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-            "Tutti i riferimenti CDN includono l'attributo `integrity`." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            $overrideConfigPath = Join-Path $env:GITHUB_WORKSPACE 'tools/cdn-integrity.config.json'
+
+            if (Test-Path -LiteralPath $overrideConfigPath) {
+              $config = Get-Content -LiteralPath $overrideConfigPath -Raw | ConvertFrom-Json
+
+              if (@($config.FilePatterns).Count -gt 0) {
+                $args += '-FilePatterns'
+                $args += @($config.FilePatterns)
+              }
+
+              if (@($config.CdnDomains).Count -gt 0) {
+                $args += '-CdnDomains'
+                $args += @($config.CdnDomains)
+              }
+
+              if (@($config.ExcludeFolders).Count -gt 0) {
+                $args += '-ExcludeFolders'
+                $args += @($config.ExcludeFolders)
+              }
+            }
           }
+
+          Write-Host "CDN integrity - args resolved: $($args -join ' ')"
+
+
+
+
+
+
+      # ============================================================
+      # STEP 2 - EXEC: esecuzione dello script e cattura output JSON
+      # ------------------------------------------------------------
+      # - Eseguire `./tools/deployCheckCDNIntegrity.ps1 @args`
+      # - Catturare STDOUT in `$json` (deve essere solo JSON)
+      # ============================================================
+
+      # ============================================================
+      # STEP 3 - PARSE: parsing del JSON (contratto “machine-readable”)
+      # ------------------------------------------------------------
+      # - `$result = $json | ConvertFrom-Json`
+      # - Il contratto atteso:
+      #   - `result.successes` / `result.failures` : mappe `<filePath> -> [occ]`
+      #   - `summary.*` : conteggi deterministici
+      # ============================================================
+
+      # ============================================================
+      # STEP 4 - NORMALIZE: flatten delle mappe in liste di occorrenze
+      # ------------------------------------------------------------
+      # - Creare liste uniformi per report/annotazioni:
+      #   - ogni item: `File`, `Line`, `Column`, `Cdn`, `LineText`
+      # ============================================================
+
+      # ============================================================
+      # STEP 5 - REPORT: scrittura report su `$GITHUB_STEP_SUMMARY`
+      # ------------------------------------------------------------
+      # - Stampare conteggi (files scanned, success/failure occurrences, ecc.)
+      # - Se fallimenti: elencare dettagli (file + posizione + riga)
+      # ============================================================
+
+      # ============================================================
+      # STEP 6 - ANNOTATIONS: warning GitHub per ogni fallimento
+      # ------------------------------------------------------------
+      # - Generare `::warning file=...,line=...,col=...::...`
+      # - Nota: assicurarsi che la stringa sia trattata come testo puro in pwsh
+      # ============================================================
+
+      # ============================================================
+      # STEP 7 - ENFORCE: fail del job se esistono fallimenti
+      # ------------------------------------------------------------
+      # - Se `failure occurrences > 0` => `throw` / `exit 1`
+      # - Altrimenti: output “OK” nel summary
+      # ============================================================
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
