@@ -1,0 +1,20 @@
+{
+  "CdnDomains": [
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com"
+  ],
+  "FilePatterns": [
+    "*.aspx",
+    "*.ascx",
+    "*.html",
+    "*.jsp",
+    "*.php"
+  ],
+  "ExcludeFolders": [
+    "tools",
+    "bin",
+    "obj",
+    "packages",
+    "node_modules"
+  ]
+}

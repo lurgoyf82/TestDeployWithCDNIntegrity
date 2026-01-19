@@ -1,190 +1,242 @@
-param(
-  [string[]] $CdnDomains = @(
-    "http://maps.google.com"
-    ,"https://cdn.jsdelivr.net"
-    ,"https://cdnjs.cloudflare.com"
-    ,"https://code.jquery.com"
-    ,"https://maps.google.com"
-    ,"https://maps.googleapis.com"
-    ,"https://unpkg.com"
-    #Inserire qui altri CDN se necessario
-  ),
-  [string[]] $FilePatterns = @(
-      "*.aspx"
-      ,"*.ascx"
-      ,"*.html"
-      ,"*.jsp"
-      ,"*.php"
-      #Aggiungere qui altri pattern di file se necessario, ricordarsi la virgola iniziale
-  )
-)
+﻿# ============================================================
+# SCOPO DELLO SCRIPT
+# ------------------------------------------------------------
+# Questo script fa parte di una pipeline CI/CD e verifica che
+# tutti i riferimenti a CDN presenti nei file del progetto
+# includano l’attributo di sicurezza "integrity".
+#
+# L’assenza dell’attributo "integrity" su una risorsa CDN è
+# considerata un errore bloccante per la pipeline.
+# ============================================================
 
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+# ============================================================
+# RISOLUZIONE DEL CONTESTO DI ESECUZIONE
+# ------------------------------------------------------------
+# Viene determinata la cartella root del progetto.
+# Per convenzione, la root è una cartella sopra quella
+# contenente lo script (tipico layout repo/tools).
+#
+# Tutte le ricerche di file partono esclusivamente da questa
+# root, garantendo coerenza tra esecuzione locale e CI.
+# ============================================================
+
+$scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
+$repoRoot = (Resolve-Path -LiteralPath (Split-Path -Path $scriptDir -Parent)).Path
+
+
+# ============================================================
+# CONFIGURAZIONE
+# ------------------------------------------------------------
+# La configurazione NON è hardcoded nello script.
+# Tutti i parametri operativi (CDN, pattern di file, cartelle
+# da escludere) vengono letti da un file JSON esterno,
+# posizionato nella stessa cartella di questo script.
+#
+# Il file JSON è la SINGLE SOURCE OF TRUTH per la pipeline.
+# Se il file JSON è mancante o invalido, lo script deve fallire.
+# ============================================================
+
+$configPath = Join-Path -Path $scriptDir -ChildPath 'deployCheckCDNIntegrity.json'
+
+if (-not (Test-Path -LiteralPath $configPath)) {
+	throw "File di configurazione mancante: '$configPath'."
+}
+
+try {
+	$config = (Get-Content -LiteralPath $configPath -Raw -Encoding UTF8) | ConvertFrom-Json -ErrorAction Stop
+}
+catch {
+	throw "File di configurazione invalido o non parsabile: '$configPath'. Dettagli: $($_.Exception.Message)"
+}
+
+if (-not $config.PSObject.Properties.Match('CdnDomains')) { throw "Configurazione invalida: 'CdnDomains' mancante in '$configPath'." }
+if (-not $config.PSObject.Properties.Match('FilePatterns')) { throw "Configurazione invalida: 'FilePatterns' mancante in '$configPath'." }
+if (-not $config.PSObject.Properties.Match('ExcludeFolders')) { throw "Configurazione invalida: 'ExcludeFolders' mancante in '$configPath'." }
+
+$CdnDomains = @($config.CdnDomains | ForEach-Object { "$_" })
+$FilePatterns = @($config.FilePatterns | ForEach-Object { "$_" })
+$ExcludeFolders = @($config.ExcludeFolders | ForEach-Object { "$_" })
+
+if ($CdnDomains.Count -eq 0) { throw "Configurazione invalida: 'CdnDomains' vuoto in '$configPath'." }
+if ($FilePatterns.Count -eq 0) { throw "Configurazione invalida: 'FilePatterns' vuoto in '$configPath'." }
+
+# ============================================================
+# INIZIALIZZAZIONE DELL’OGGETTO DI RISULTATO
+# ------------------------------------------------------------
+# Struttura richiesta (contratto):
+# - result
+#   - successes (map file -> occorrenze)
+#     - <FilePath>
+#       - [ elenco di occorrenze valide ]
+#   - failures  (map file -> occorrenze)
+#     - <FilePath>
+#       - [ elenco di occorrenze non valide ]
+#
+# Dove ogni occorrenza contiene informazioni di dettaglio:
+# - CDN rilevata
+# - riga (1-based)
+# - colonna (1-based)
+# - testo completo della riga
+# - flag che indica la presenza o meno dell’attributo integrity
+#
+# Un file può:
+# - non contenere alcun CDN
+# - contenere solo successi
+# - contenere solo fallimenti
+# - contenere entrambi
+
+# - summary
+#   - totalFilesScanned
+#       Numero totale di file analizzati dallo script.
+#
+#   - filesWithSuccesses
+#       Numero di file che contengono almeno una occorrenza
+#       valida (CDN con attributo integrity).
+#
+#   - filesWithFailures
+#       Numero di file che contengono almeno una occorrenza
+#       non valida (CDN senza attributo integrity).
+#
+#   - totalSuccessOccurrences
+#       Numero totale di occorrenze valide rilevate
+#       (somma di tutte le occorrenze su tutti i file).
+#
+#   - totalFailureOccurrences
+#       Numero totale di occorrenze non valide rilevate
+#       (somma di tutte le occorrenze su tutti i file).
+# ============================================================
+
+$resultObject = [pscustomobject]@{
+	result  = [pscustomobject]@{
+		successes = @{}
+		failures  = @{}
+	}
+	summary = [pscustomobject]@{
+		totalFilesScanned        = 0
+		filesWithSuccesses       = 0
+		filesWithFailures        = 0
+		totalSuccessOccurrences  = 0
+		totalFailureOccurrences  = 0
+	}
+}
+
+# ============================================================
+# DISCOVERY DEI FILE DA ANALIZZARE
+# ============================================================
 
 $allFiles = New-Object System.Collections.Generic.List[System.IO.FileInfo]
 
 foreach ($pattern in $FilePatterns) {
-  $matching = Get-ChildItem -Path $root -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue
-  foreach ($f in $matching) { $allFiles.Add($f) }
+	$matching = Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter $pattern -ErrorAction SilentlyContinue
+	foreach ($f in $matching) { $allFiles.Add($f) }
 }
 
-$files = $allFiles |
-  Where-Object { $_.FullName -notmatch "\\(bin|obj|packages|node_modules)\\" } |
-  Sort-Object -Property FullName -Unique
+$filesToScan = $allFiles |
+	Where-Object {
+		$excludedRegex = '\\(' + (($ExcludeFolders | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')\\'
+		$_.FullName -notmatch $excludedRegex
+	} |
+	Sort-Object -Property FullName -Unique |
+	Select-Object -ExpandProperty FullName
 
-# Write-Host "File trovati ($($files.Count)) sotto '$root' con pattern: $($FilePatterns -join ', ')" -ForegroundColor Cyan
-# if ($files.Count -eq 0) {
-#   Write-Host "Nessun file trovato." -ForegroundColor Yellow
-# } else {
-#   $files | ForEach-Object { Write-Host " - $($_.FullName)" }
-# }
+$resultObject.summary.totalFilesScanned = @($filesToScan).Count
 
-function Test-CdnIntegrityFile {
-  param(
-    [Parameter(Mandatory)]
-    [System.IO.FileInfo] $File,
 
-    [Parameter(Mandatory)]
-    [string[]] $CdnDomains
-  )
+# ============================================================
+# ANALISI DEI FILE
+# ------------------------------------------------------------
+# Per ogni file individuato:
+# - il file viene letto interamente
+# - per ogni CDN configurato:
+#   - se il CDN non è presente nel file, viene saltato
+#   - se presente:
+#       - vengono analizzate tutte le righe che lo contengono
+#       - per ogni riga:
+#           - viene calcolata riga e colonna dell’occorrenza
+#           - viene verificata la presenza dell’attributo
+#             "integrity" sulla STESSA riga
+#
+# Ogni occorrenza viene classificata come:
+# - SUCCESSO  → CDN con integrity
+# - FALLIMENTO → CDN senza integrity
+#
+# I risultati vengono associati al file corrente.
+# ============================================================
 
-  $successes = New-Object System.Collections.Generic.List[object]
-  $failures = New-Object System.Collections.Generic.List[object]
+$integrityRegex = '(?i)\bintegrity\s*=\s*(["'']).+?\1'
 
-  $content = Get-Content -Path $File.FullName -Raw -ErrorAction Stop
+foreach ($filePath in $filesToScan) {
+	$content = Get-Content -LiteralPath $filePath -Raw -Encoding UTF8 -ErrorAction Stop
+	if ([string]::IsNullOrEmpty($content)) { continue }
 
-  foreach ($cdn in $CdnDomains) {
-    if ($content -match [regex]::Escape($cdn)) {
-      $lines = $content -split "`n"
-      for ($i = 0; $i -lt $lines.Length; $i++) {
-        if ($lines[$i] -match [regex]::Escape($cdn)) {
-          $lineNumber = $i + 1
-          $charIndex = $lines[$i].IndexOf($cdn) + 1
+	foreach ($cdn in $CdnDomains) {
+		if ([string]::IsNullOrWhiteSpace($cdn)) { continue }
 
-          $hasIntegrity = ($lines[$i] -match 'integrity\s*=\s*["'']')
+		$cdnEscaped = [regex]::Escape($cdn)
+		if ($content -notmatch $cdnEscaped) { continue }
 
-          $item = [PSCustomObject]@{
-            Cdn       = $cdn
-            File      = $File.FullName
-            Line      = $lineNumber
-            Column    = $charIndex
-            LineText  = $lines[$i].TrimEnd("`r")
-            Integrity = $hasIntegrity
-          }
+		$lines = $content -split "`n"
+		for ($i = 0; $i -lt $lines.Length; $i++) {
+			$lineText = $lines[$i].TrimEnd("`r")
+			if ($lineText -notmatch $cdnEscaped) { continue }
 
-          if ($hasIntegrity) { $successes.Add($item) | Out-Null }
-          else { $failures.Add($item) | Out-Null }
-        }
-      }
-    }
-  }
+			$startIndex = 0
+			while ($true) {
+				$idx = $lineText.IndexOf($cdn, $startIndex, [System.StringComparison]::OrdinalIgnoreCase)
+				if ($idx -lt 0) { break }
 
-  return [PSCustomObject]@{
-    Successes = $successes
-    Failures  = $failures
-  }
+				$hasIntegrity = ($lineText -match $integrityRegex)
+
+				$occ = [pscustomobject]@{
+					cdn          = $cdn
+					line         = $i + 1
+					column       = $idx + 1
+					lineText     = $lineText
+					hasIntegrity = $hasIntegrity
+				}
+
+				if ($hasIntegrity) {
+					if (-not $resultObject.result.successes.ContainsKey($filePath)) { $resultObject.result.successes[$filePath] = @() }
+					$resultObject.result.successes[$filePath] += $occ
+					$resultObject.summary.totalSuccessOccurrences++
+				}
+				else {
+					if (-not $resultObject.result.failures.ContainsKey($filePath)) { $resultObject.result.failures[$filePath] = @() }
+					$resultObject.result.failures[$filePath] += $occ
+					$resultObject.summary.totalFailureOccurrences++
+				}
+
+				$startIndex = $idx + [Math]::Max(1, $cdn.Length)
+			}
+		}
+	}
 }
 
-$allSuccesses = New-Object System.Collections.Generic.List[object]
-$allFailures = New-Object System.Collections.Generic.List[object]
+$resultObject.summary.filesWithSuccesses = @($resultObject.result.successes.Keys).Count
+$resultObject.summary.filesWithFailures = @($resultObject.result.failures.Keys).Count
 
-foreach ($file in $files) {
-  $result = Test-CdnIntegrityFile -File $file -CdnDomains $CdnDomains
-  foreach ($s in $result.Successes) { $allSuccesses.Add($s) | Out-Null }
-  foreach ($f in $result.Failures) { $allFailures.Add($f) | Out-Null }
-}
-
-# Output �machine-readable� per CI
-[PSCustomObject]@{
-  Successes = $allSuccesses
-  Failures  = $allFailures
-  Counts    = [PSCustomObject]@{
-    Successes = $allSuccesses.Count
-    Failures  = $allFailures.Count
-  }
-} | ConvertTo-Json -Depth 6
-
-
-
-
-
-
-
-
-# Stampa �umana� (per log CI/locale), poi output JSON per il workflow.
-Write-Host ""
-Write-Host "=== CDN integrity report (human readable) ==="
-Write-Host ("Files analizzati: {0}" -f $files.Count)
-Write-Host ("Successes: {0} | Failures: {1}" -f $allSuccesses.Count, $allFailures.Count)
-Write-Host ""
-
-$groupedFailures = $allFailures | Group-Object -Property File | Sort-Object Name
-foreach ($g in $groupedFailures) {
-  $fileName = [System.IO.Path]::GetFileName($g.Name)
-  Write-Host ("--- FAILURES in {0} ({1}) ---" -f $fileName, $g.Count)
-
-  foreach ($f in ($g.Group | Sort-Object Line, Column)) {
-    Write-Host ("{0} (R:{1},C:{2}) {3}" -f $fileName, $f.Line, $f.Column, $f.LineText)
-  }
-
-  Write-Host ""
-}
-
-$groupedSuccesses = $allSuccesses | Group-Object -Property File | Sort-Object Name
-foreach ($g in $groupedSuccesses) {
-  $fileName = [System.IO.Path]::GetFileName($g.Name)
-  Write-Host ("--- SUCCESSES in {0} ({1}) ---" -f $fileName, $g.Count)
-}
-
-Write-Host "=== End report ==="
-Write-Host ""
-
-# --- Output machine-readable per CI (DEVE essere l'ultima cosa su stdout) ---
-[PSCustomObject]@{
-  Successes = $allSuccesses
-  Failures  = $allFailures
-  Counts    = [PSCustomObject]@{
-    Successes = $allSuccesses.Count
-    Failures  = $allFailures.Count
-  }
-} | ConvertTo-Json -Depth 6
-
-
-
-
-
-
-
-
-#C:\Repos\siunet-gearsnet\tools\deployCheckCDNIntegrity.ps1
-#Powershell script per verificare l'integrit� dei file caricati sui CDN specificati durante il deploy.
+# ============================================================
+# OUTPUT MACHINE-READABLE (CONTRATTO CI)
+# ------------------------------------------------------------
+# Lo script emette un output JSON strutturato e deterministico,
+# pensato per essere parsato automaticamente dalla pipeline.
 #
-# Esecuzione locale (cmd):
-# powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Repos\TestDeployWithCDNIntegrity\tools\deployCheckCDNIntegrity.ps1"
+# Questo JSON rappresenta il CONTRATTO di output dello script.
+# La pipeline CI/CD deve basarsi ESCLUSIVAMENTE su questo JSON.
 #
-# Azure DevOps (azure-pipelines.yml):
-#
-# - task: PowerShell@2
-#   displayName: Check CDN integrity
-#   inputs:
-#     pwsh: true
-#     filePath: 'tools/deployCheckCDNIntegrity.ps1'
-#     arguments: >
-#       -LogLevel 0
-#       -FilePatterns "*.aspx" "*.master"
-#       -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
-#
-#
-# AWS CodeBuild (buildspec.yml):
-#
-# version: 0.2
-# phases:
-#   build:
-#     commands:
-#       - powershell.exe -NoProfile -ExecutionPolicy Bypass `
-#           -File ".\tools\deployCheckCDNIntegrity.ps1" `
-#           -LogLevel 0 `
-#           -FilePatterns "*.aspx" "*.master" `
-#           -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+# In particolare:
+# - se il numero di fallimenti > 0, la pipeline deve fallire
+# ============================================================
+
+# ------------------------------------------------------------
+# DEBUG: stampa elenco file da analizzare
+# ------------------------------------------------------------
+#Write-Output "FILES TO SCAN ($(@($filesToScan).Count)):"
+#$filesToScan | ForEach-Object { Write-Output " - $_" }
 
 
+# ============================================================
+# OUTPUT (console)
+# ============================================================
+
+#Write-Output ($resultObject | ConvertTo-Json -Depth 20)

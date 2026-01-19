@@ -1,0 +1,51 @@
+{
+  "_examples": {
+    "_note": "Esempi di configurazione. Questa sezione è ignorata dallo script.",
+    "CdnDomains": [
+      "https://cdn.jsdelivr.net",
+      "https://cdnjs.cloudflare.com",
+      "https://code.jquery.com",
+      "https://maps.googleapis.com",
+      "https://maps.google.com",
+      "http://maps.google.com",
+      "https://unpkg.com"
+    ],
+    "FilePatterns": [
+      "*.aspx",
+      "*.ascx",
+      "*.html",
+      "*.jsp",
+      "*.php"
+    ],
+    "ExcludeFolders": [
+      "tools",
+      "bin",
+      "obj",
+      "packages",
+      "node_modules"
+    ]
+  },
+  "CdnDomains": [
+    "https://cdn.jsdelivr.net",
+    "https://cdnjs.cloudflare.com",
+    "https://code.jquery.com",
+    "https://maps.googleapis.com",
+    "https://maps.google.com",
+    "http://maps.google.com",
+    "https://unpkg.com"
+  ],
+  "FilePatterns": [
+    "*.aspx",
+    "*.ascx",
+    "*.html",
+    "*.jsp",
+    "*.php"
+  ],
+  "ExcludeFolders": [
+    "tools",
+    "bin",
+    "obj",
+    "packages",
+    "node_modules"
+  ]
+}
