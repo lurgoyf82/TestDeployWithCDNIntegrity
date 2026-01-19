@@ -60,14 +60,17 @@ jobs:
             Write-Host "::warning::Verifica CDN: trovati $($result.Counts.Failures) riferimento/i senza attributo 'integrity'."
 
             foreach ($f in $result.Failures) {
+              $fileName = [System.IO.Path]::GetFileName([string]$f.File)
+
+              # Riga “umana” come la vuoi tu
+              Write-Host ("{0} (R:{1},C:{2}) {3}" -f $fileName, $f.Line, $f.Column, $f.LineText)
+
+              # (Opzionale) anche warning “annotato” in GitHub, ma con path relativo
               $ws = $env:GITHUB_WORKSPACE.TrimEnd('/', '\')
               $full = [string]$f.File
-
-              # Normalizza e rendi relativo (GitHub annota meglio con path relativo)
               $relative = $full.Replace('\','/').Replace($ws.Replace('\','/').TrimEnd('/') + '/', '')
 
               Write-Host ("::warning file={0},line={1},col={2}::Manca 'integrity' | CDN: {3}" -f $relative, $f.Line, $f.Column, $f.Cdn)
-              Write-Host ("::warning file={0},line={1},col={2}::Riga: {3}" -f $relative, $f.Line, $f.Column, $f.LineText)
             }
           }
           else {
