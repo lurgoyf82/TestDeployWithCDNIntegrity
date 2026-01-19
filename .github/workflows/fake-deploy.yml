@@ -39,23 +39,16 @@ jobs:
         run: |
           $json = ./tools/deployCheckCDNIntegrity.ps1 `
             -LogLevel 3 `
-            -FilePatterns `
-              "*.aspx" `
-              "*.html" `
-              "*.php" `
-              "*.jsp" `
-
-            -CdnDomains `
-              "http://maps.google.com" `
-              "https://cdn.jsdelivr.net" `
-              "https://cdnjs.cloudflare.com" `
-              "https://code.jquery.com" `
-              "https://maps.google.com" `
-              "https://maps.googleapis.com" `
-              "https://unpkg.com"
+            -FilePatterns "*.aspx" "*.html" "*.php" "*.jsp" `
+            -CdnDomains "http://maps.google.com" `
+                        "https://cdn.jsdelivr.net" `
+                        "https://cdnjs.cloudflare.com" `
+                        "https://code.jquery.com" `
+                        "https://maps.google.com" `
+                        "https://maps.googleapis.com" `
+                        "https://unpkg.com"
 
           $result = $json | ConvertFrom-Json
-
           Write-Host "CDN integrity - Successes: $($result.Counts.Successes) - Failures: $($result.Counts.Failures)"
 
           if ([int]$result.Counts.Failures -gt 0) {
