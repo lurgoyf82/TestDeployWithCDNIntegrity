@@ -11,6 +11,10 @@ param(
   ),
   [string[]] $FilePatterns = @(
       "*.aspx"
+      ,"*.ascx"
+      ,"*.html"
+      ,"*.jsp"
+      ,"*.php"
       #Aggiungere qui altri pattern di file se necessario, ricordarsi la virgola iniziale
   )
 )
@@ -107,9 +111,43 @@ foreach ($file in $files) {
 
 
 
+# Stampa “umana” (per log CI/locale), poi output JSON per il workflow.
+Write-Host ""
+Write-Host "=== CDN integrity report (human readable) ==="
+Write-Host ("Files analizzati: {0}" -f $files.Count)
+Write-Host ("Successes: {0} | Failures: {1}" -f $allSuccesses.Count, $allFailures.Count)
+Write-Host ""
 
+$groupedFailures = $allFailures | Group-Object -Property File | Sort-Object Name
+foreach ($g in $groupedFailures) {
+  $fileName = [System.IO.Path]::GetFileName($g.Name)
+  Write-Host ("--- FAILURES in {0} ({1}) ---" -f $fileName, $g.Count)
 
+  foreach ($f in ($g.Group | Sort-Object Line, Column)) {
+    Write-Host ("{0} (R:{1},C:{2}) {3}" -f $fileName, $f.Line, $f.Column, $f.LineText)
+  }
 
+  Write-Host ""
+}
+
+$groupedSuccesses = $allSuccesses | Group-Object -Property File | Sort-Object Name
+foreach ($g in $groupedSuccesses) {
+  $fileName = [System.IO.Path]::GetFileName($g.Name)
+  Write-Host ("--- SUCCESSES in {0} ({1}) ---" -f $fileName, $g.Count)
+}
+
+Write-Host "=== End report ==="
+Write-Host ""
+
+# --- Output machine-readable per CI (DEVE essere l'ultima cosa su stdout) ---
+[PSCustomObject]@{
+  Successes = $allSuccesses
+  Failures  = $allFailures
+  Counts    = [PSCustomObject]@{
+    Successes = $allSuccesses.Count
+    Failures  = $allFailures.Count
+  }
+} | ConvertTo-Json -Depth 6
 
 
 

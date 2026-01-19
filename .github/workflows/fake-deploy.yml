@@ -40,9 +40,10 @@ jobs:
           $json = ./tools/deployCheckCDNIntegrity.ps1 `
             -FilePatterns `
               "*.aspx" `
+              "*.ascx" `
               "*.html" `
-              "*.php" `
               "*.jsp" `
+              "*.php" `
             -CdnDomains `
               "http://maps.google.com" `
               "https://cdn.jsdelivr.net" `
@@ -54,27 +55,38 @@ jobs:
 
           $result = $json | ConvertFrom-Json
 
-          Write-Host "CDN integrity - Successes: $($result.Counts.Successes) - Failures: $($result.Counts.Failures)"
+          $failures = @($result.Failures)
+          $successes = @($result.Successes)
 
-          if ([int]$result.Counts.Failures -gt 0) {
-            Write-Host "::warning::Verifica CDN: trovati $($result.Counts.Failures) riferimento/i senza attributo 'integrity'."
+          Write-Host "CDN integrity - Successes: $($successes.Count) - Failures: $($failures.Count)"
 
-            foreach ($f in $result.Failures) {
-              $fileName = [System.IO.Path]::GetFileName([string]$f.File)
+          # --- Job Summary (markdown) ---
+          "## CDN integrity report" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          ("- Successes: **{0}**" -f $successes.Count) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          ("- Failures: **{0}**" -f $failures.Count) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
-              # Riga “umana” come la vuoi tu
-              Write-Host ("{0} (R:{1},C:{2}) {3}" -f $fileName, $f.Line, $f.Column, $f.LineText)
+          if ($failures.Count -gt 0) {
+            "### Riferimenti senza `integrity`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
-              # (Opzionale) anche warning “annotato” in GitHub, ma con path relativo
+            foreach ($f in $failures) {
               $ws = $env:GITHUB_WORKSPACE.TrimEnd('/', '\')
               $full = [string]$f.File
               $relative = $full.Replace('\','/').Replace($ws.Replace('\','/').TrimEnd('/') + '/', '')
 
+              # Annotation cliccabile
               Write-Host ("::warning file={0},line={1},col={2}::Manca 'integrity' | CDN: {3}" -f $relative, $f.Line, $f.Column, $f.Cdn)
+
+              # Summary (una riga per occorrenza)
+              ("- `{0}` (R:{1}, C:{2})  `{3}`" -f $relative, $f.Line, $f.Column, $f.LineText.Trim()) |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             }
           }
           else {
-            Write-Host "::notice::OK - Verifica CDN superata: tutti i riferimenti CDN hanno l'attributo 'integrity'."
+            "### OK" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "Tutti i riferimenti CDN includono l'attributo `integrity`." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           }
 
       - name: Fake compile
