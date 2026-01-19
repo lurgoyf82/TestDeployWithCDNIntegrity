@@ -3,7 +3,7 @@ name: Fake Deploy Pipeline
 on:
   push:
     branches:
-      - develop
+      - develop_feat_cdn_integrity
   workflow_dispatch:
 
 concurrency:
