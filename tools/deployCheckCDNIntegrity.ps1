@@ -74,28 +74,14 @@ function Test-CdnIntegrityFile {
     [System.IO.FileInfo] $File,
 
     [Parameter(Mandatory)]
-    [string[]] $CdnDomains,
-
-    [Parameter(Mandatory)]
-    [string[]] $FilePatterns,
-
-    #0 - 00 -> No output (default)
-    #1 - 01 -> Successes
-    #2 - 10 -> Failures
-    #3 - 11 -> All
-    [Parameter()]
-    [int] $LogLevel = 0
+    [string[]] $CdnDomains
   )
-
-  #If $LogLevel as binary has bit 1 set, print Successes must be printed
-  $printSuccesses = ($LogLevel -band 1) -eq 1
-  #If $LogLevel as binary has bit 2 set, print Failures must be printed
-  $printFailures = ($LogLevel -band 2) -eq 2
 
   $successes = New-Object System.Collections.Generic.List[object]
   $failures = New-Object System.Collections.Generic.List[object]
 
   $content = Get-Content -Path $File.FullName -Raw -ErrorAction Stop
+
   foreach ($cdn in $CdnDomains) {
     if ($content -match [regex]::Escape($cdn)) {
       $lines = $content -split "`n"
@@ -104,34 +90,19 @@ function Test-CdnIntegrityFile {
           $lineNumber = $i + 1
           $charIndex = $lines[$i].IndexOf($cdn) + 1
 
-          if ($lines[$i] -match 'integrity\s*=\s*["'']') {
-            if ($printSuccesses) {
-              #Write-Host " - Trovato riferimento CDN: $cdn (Rigo: $lineNumber, Carattere: $charIndex)" -ForegroundColor Green
-              #Write-Host "   $($lines[$i])" -ForegroundColor DarkGray
-              $successes.Add([PSCustomObject]@{
-                Cdn        = $cdn
-                File       = $File.FullName
-                Line       = $lineNumber
-                Column     = $charIndex
-                LineText   = $lines[$i].TrimEnd("`r")
-                Integrity  = $true
-              }) | Out-Null
-            }
-          } else {
-            if ($printFailures) {
-              #Write-Host " - Trovato riferimento CDN: $cdn (Rigo: $lineNumber, Carattere: $charIndex)" -ForegroundColor Yellow
-              #Write-Host "   $($lines[$i])" -ForegroundColor DarkGray
-              #Write-Host "   Attenzione: Attributo 'integrity' NON trovato in questo rigo." -ForegroundColor Red
-              $failures.Add([PSCustomObject]@{
-                Cdn        = $cdn
-                File       = $File.FullName
-                Line       = $lineNumber
-                Column     = $charIndex
-                LineText   = $lines[$i].TrimEnd("`r")
-                Integrity  = $false
-              }) | Out-Null
-            }
+          $hasIntegrity = ($lines[$i] -match 'integrity\s*=\s*["'']')
+
+          $item = [PSCustomObject]@{
+            Cdn       = $cdn
+            File      = $File.FullName
+            Line      = $lineNumber
+            Column    = $charIndex
+            LineText  = $lines[$i].TrimEnd("`r")
+            Integrity = $hasIntegrity
           }
+
+          if ($hasIntegrity) { $successes.Add($item) | Out-Null }
+          else { $failures.Add($item) | Out-Null }
         }
       }
     }
@@ -147,8 +118,7 @@ $allSuccesses = New-Object System.Collections.Generic.List[object]
 $allFailures = New-Object System.Collections.Generic.List[object]
 
 foreach ($file in $files) {
-  $result = Test-CdnIntegrityFile -File $file -CdnDomains $CdnDomains -FilePatterns $FilePatterns -LogLevel 3
-
+  $result = Test-CdnIntegrityFile -File $file -CdnDomains $CdnDomains
   foreach ($s in $result.Successes) { $allSuccesses.Add($s) | Out-Null }
   foreach ($f in $result.Failures) { $allFailures.Add($f) | Out-Null }
 }

@@ -52,9 +52,7 @@ jobs:
             Write-Host "-------------------------------------------------"
 
             foreach ($f in $result.Failures) {
-              Write-Host ("File: {0}" -f $f.File)
-              Write-Host ("Posizione: riga {0}, colonna {1}" -f $f.Line, $f.Column)
-              Write-Host ("CDN: {0}" -f $f.Cdn)
+              Write-Host ("File: {0} (R:{1} - C:{2})" -f $f.File, $f.Line, $f.Column)
               Write-Host ("Riga: {0}" -f $f.LineText)
               Write-Host ""
             }
