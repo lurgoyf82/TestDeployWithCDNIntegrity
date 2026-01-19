@@ -37,10 +37,17 @@ jobs:
       - name: Check CDN integrity
         shell: pwsh
         run: |
-          ./tools/deployCheckCDNIntegrity.ps1 `
+          $json = ./tools/deployCheckCDNIntegrity.ps1 `
             -LogLevel 3 `
             -FilePatterns "*.aspx" "*.html" "*.php" "*.jsp" `
             -CdnDomains "https://cdnjs.cloudflare.com" "https://cdn.jsdelivr.net"
+
+          $result = $json | ConvertFrom-Json
+          "CDN integrity - Successes: $($result.Counts.Successes) - Failures: $($result.Counts.Failures)"
+
+          if ([int]$result.Counts.Failures -gt 0) {
+            throw "CDN integrity check failed: $($result.Counts.Failures) reference(s) without integrity."
+          }
 
       - name: Fake compile
         run: |

@@ -137,14 +137,28 @@ function Test-CdnIntegrityFile {
     }
   }
 
-  $failures = New-Object System.Collections.Generic.List[object]
-  return $failures
-}
-
-$failures = New-Object System.Collections.Generic.List[object]
-foreach ($file in $files) {
-  $fileFailures = Test-CdnIntegrityFile -File $file -CdnDomains $CdnDomains -FilePatterns $FilePatterns -LogLevel 3
-  foreach ($failure in $fileFailures) {
-    $failures.Add($failure)
+  return [PSCustomObject]@{
+    Successes = $successes
+    Failures  = $failures
   }
 }
+
+$allSuccesses = New-Object System.Collections.Generic.List[object]
+$allFailures = New-Object System.Collections.Generic.List[object]
+
+foreach ($file in $files) {
+  $result = Test-CdnIntegrityFile -File $file -CdnDomains $CdnDomains -FilePatterns $FilePatterns -LogLevel 3
+
+  foreach ($s in $result.Successes) { $allSuccesses.Add($s) | Out-Null }
+  foreach ($f in $result.Failures) { $allFailures.Add($f) | Out-Null }
+}
+
+# Output “machine-readable” per CI
+[PSCustomObject]@{
+  Successes = $allSuccesses
+  Failures  = $allFailures
+  Counts    = [PSCustomObject]@{
+    Successes = $allSuccesses.Count
+    Failures  = $allFailures.Count
+  }
+} | ConvertTo-Json -Depth 6
