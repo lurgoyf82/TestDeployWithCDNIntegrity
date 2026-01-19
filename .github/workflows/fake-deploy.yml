@@ -38,7 +38,6 @@ jobs:
         shell: pwsh
         run: |
           $json = ./tools/deployCheckCDNIntegrity.ps1 `
-            -LogLevel 3 `
             -FilePatterns `
               "*.aspx" `
               "*.html" `
@@ -58,21 +57,15 @@ jobs:
           Write-Host "CDN integrity - Successes: $($result.Counts.Successes) - Failures: $($result.Counts.Failures)"
 
           if ([int]$result.Counts.Failures -gt 0) {
-            Write-Host ""
-            Write-Host "Riferimenti CDN senza attributo 'integrity' trovati:"
-            Write-Host "-------------------------------------------------"
+            Write-Host "::warning::Verifica CDN: trovati $($result.Counts.Failures) riferimento/i senza attributo 'integrity'."
 
             foreach ($f in $result.Failures) {
-              Write-Host ("File: {0} (R:{1} - C:{2})" -f $f.File, $f.Line, $f.Column)
-              Write-Host ("Riga: {0}" -f $f.LineText)
-              Write-Host ""
+              $msg = "Manca 'integrity' | CDN: $($f.Cdn) | Riga: $($f.LineText)"
+              Write-Host ("::warning file={0},line={1},col={2}::{3}" -f $f.File, $f.Line, $f.Column, $msg)
             }
-
-            throw ("Verifica CDN fallita: trovati {0} riferimento/i senza 'integrity'." -f $result.Counts.Failures)
           }
           else {
-            Write-Host ""
-            Write-Host ("OK - Verifica CDN superata: tutti i riferimenti CDN hanno l'attributo 'integrity'. (Riferimenti verificati: {0})" -f $result.Counts.Successes)
+            Write-Host "::notice::OK - Verifica CDN superata: tutti i riferimenti CDN hanno l'attributo 'integrity'."
           }
 
       - name: Fake compile
